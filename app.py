@@ -39,7 +39,7 @@ def whatsapp_webhook():
     )
 
     # Format and send Twilio response
-    reply = response.choices[0].message["content"].strip()
+    reply = response.choices[0].message.content.strip()
     twilio_resp = MessagingResponse()
     twilio_resp.message(f"Logged:\n{reply}")
     return str(twilio_resp)
