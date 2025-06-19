@@ -14,18 +14,27 @@ def whatsapp_webhook():
     incoming_msg = request.values.get("Body", "")
     print("Received message:", incoming_msg)
 
+    # Prompt OpenAI for structured JSON response
     response = openai.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "You're a helpful assistant that tracks personal expenses."},
+            {
+                "role": "system",
+                "content": (
+                    "You're a financial assistant. Extract expense information from the message "
+                    "and respond with a JSON object in the format: "
+                    "{ 'amount': float, 'category': string, 'description': string }. "
+                    "Be concise and accurate."
+                )
+            },
             {"role": "user", "content": incoming_msg}
         ]
     )
 
+    # Format and send Twilio response
     reply = response.choices[0].message.content.strip()
-
     twilio_resp = MessagingResponse()
-    twilio_resp.message(reply)
+    twilio_resp.message(f"Logged:\n{reply}")
     return str(twilio_resp)
 
 if __name__ == "__main__":
