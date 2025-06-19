@@ -1,43 +1,33 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-from openai import OpenAI
 import os
+from openai import OpenAI
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Initialize Flask app
 app = Flask(__name__)
+openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Initialize OpenAI client using your API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-@app.route("/whatsapp", methods=['POST'])
+@app.route("/whatsapp", methods=["POST"])
 def whatsapp_webhook():
-    incoming_msg = request.values.get('Body', '').strip()
+    incoming_msg = request.values.get("Body", "")
     print("Received message:", incoming_msg)
 
-    # Create the prompt
-    prompt = f"""Extract the expense information from this text in JSON format:
-Text: "{incoming_msg}"
-Output format: {{ "amount": float, "category": string, "description": string }}"""
-
-    # Send prompt to OpenAI
-    response = client.chat.completions.create(
+    response = openai.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": "You're a helpful assistant that tracks personal expenses."},
+            {"role": "user", "content": incoming_msg}
         ]
     )
 
-    # Extract content from OpenAI response
-    result = response.choices[0].message.content
+    reply = response.choices[0].message.content.strip()
 
-    # Create a Twilio WhatsApp reply
-    twilio_response = MessagingResponse()
-    twilio_response.message(f"Logged:\n{result}")
-    return str(twilio_response)
+    twilio_resp = MessagingResponse()
+    twilio_resp.message(reply)
+    return str(twilio_resp)
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
