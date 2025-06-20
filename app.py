@@ -44,6 +44,12 @@ def whatsapp_webhook():
     twilio_resp.message(f"Logged:\n{reply}")
     return str(twilio_resp)
 
+# 👇 This is the new keep-alive route
+@app.route("/", methods=["GET"])
+def keep_alive():
+    return "Expense bot is running!", 200
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
