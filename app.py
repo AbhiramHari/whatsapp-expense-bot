@@ -68,7 +68,9 @@ def whatsapp_webhook():
                 description=data["description"]
             )
         except Exception as e:
-            print("❌ Error parsing or logging JSON:", e)
+            import traceback
+            print("❌ Error logging to Google Sheets:", e)
+            traceback.print_exc()
             sheet_success = False
 
     # Send WhatsApp reply
@@ -86,3 +88,5 @@ def keep_alive():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+
+
