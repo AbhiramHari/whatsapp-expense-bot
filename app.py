@@ -9,8 +9,22 @@ from oauth2client.service_account import ServiceAccountCredentials
 import re
 import json
 
+from telegram import Bot, Update
+from telegram.ext import Dispatcher, MessageHandler, Filters, CallbackContext
+
+
+
 # Load environment variables
 load_dotenv()
+
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+telegram_bot = Bot(token=TELEGRAM_BOT_TOKEN)
+telegram_dispatcher = Dispatcher(telegram_bot, None, use_context=True)
+
+
+
+
 
 # Initialize Flask and OpenAI
 app = Flask(__name__)
@@ -79,6 +93,68 @@ def whatsapp_webhook():
     if not sheet_success:
         twilio_resp.message("⚠️ I understood the expense, but had trouble saving it to Google Sheets.")
     return str(twilio_resp)
+
+
+
+def handle_telegram_message(update: Update, context: CallbackContext):
+    incoming_msg = update.message.text
+    chat_id = update.message.chat_id
+
+    # Use your existing GPT prompt
+    response = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": (
+                "You are an expense tracking assistant helping the user log and categorize their spending. "
+                "Your job is to extract structured information from each message and respond in a hybrid format:\n\n"
+                "1. Identify amount, merchant, and category from the message (e.g. 'Spent $30 at Kroger').\n"
+                "2. Reply with a friendly confirmation like: `Got it! $30 spent at Kroger categorized as Groceries.`\n"
+                "3. Then output a valid JSON block on a new line for spreadsheet use:\n"
+                "{\n  \"amount\": float,\n  \"merchant\": string,\n  \"category\": string,\n  \"description\": string\n}\n"
+                "4. Use these categories: Groceries, Dining, Transport, Shopping, Bills, Entertainment, Health, Travel, Utilities, Other.\n"
+                "5. If the user corrects the category (e.g. 'No, that should be Entertainment'), update the previous entry, confirm the update, and resend the corrected JSON.\n"
+                "Always keep your response concise, friendly, and well-formatted."
+            )},
+            {"role": "user", "content": incoming_msg}
+        ]
+    )
+
+    full_reply = response.choices[0].message.content.strip()
+    json_match = re.search(r'\{.*?\}', full_reply, re.DOTALL)
+    sheet_success = True
+
+    if json_match:
+        try:
+            data = json.loads(json_match.group())
+            log_to_google_sheets(
+                amount=data["amount"],
+                merchant=data["merchant"],
+                category=data["category"],
+                description=data["description"]
+            )
+        except Exception as e:
+            import traceback
+            print("❌ Error logging to Google Sheets:", e)
+            traceback.print_exc()
+            sheet_success = False
+
+    if not sheet_success:
+        full_reply += "\n⚠️ I understood the expense, but had trouble saving it to Google Sheets."
+
+    context.bot.send_message(chat_id=chat_id, text=full_reply)
+
+
+@app.route(f"/telegram/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), bot=telegram_bot)
+    telegram_dispatcher.process_update(update)
+    return "OK", 200
+
+telegram_dispatcher.add_handler(
+    MessageHandler(Filters.text & ~Filters.command, handle_telegram_message)
+)
+
+
 
 # ✅ Keep-alive route for uptime monitoring
 @app.route("/", methods=["GET"])
